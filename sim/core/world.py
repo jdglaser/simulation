@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import heapq
 from dataclasses import dataclass, field
 
 from sim.core.config import CONFIG
+from sim.core.pathfinding import next_path_step
 from sim.nodes.base import DynamicNode, GridPos, Node, StaticNode
 from sim.nodes.behaviors.moveable import Moveable
 from sim.nodes.kinds import demo_nodes
@@ -214,70 +214,17 @@ class World:
         if node.pos == target_pos:
             return (0, 0)
 
-        next_pos = self._find_next_path_step(node.pos, target_pos, exclude=node)
+        next_pos = next_path_step(
+            CONFIG.pathfinding_algorithm,
+            self,
+            node.pos,
+            target_pos,
+            exclude=node,
+        )
         if next_pos is None:
             return (0, 0)
 
         return (next_pos.col - node.pos.col, next_pos.row - node.pos.row)
-
-    def _find_next_path_step(
-        self,
-        start: GridPos,
-        goal: GridPos,
-        exclude: Node | None = None,
-    ) -> GridPos | None:
-        # Use a small A* search so movers route around blockers instead of
-        # ping-ponging on the edge of an obstacle.
-        frontier: list[tuple[int, int, int, tuple[int, int]]] = []
-        start_key = (start.col, start.row)
-        heapq.heappush(
-            frontier,
-            (self.tile_distance(start, goal), start.row, start.col, start_key),
-        )
-
-        came_from: dict[tuple[int, int], tuple[int, int] | None] = {
-            start_key: None,
-        }
-        cost_so_far: dict[tuple[int, int], int] = {
-            start_key: 0,
-        }
-
-        while frontier:
-            _, _, _, current_key = heapq.heappop(frontier)
-            current = GridPos(col=current_key[0], row=current_key[1])
-
-            if current == goal:
-                break
-
-            for neighbor in self.cardinal_neighbors(current):
-                if neighbor != goal and self.is_tile_blocked(neighbor, exclude=exclude):
-                    continue
-
-                neighbor_key = (neighbor.col, neighbor.row)
-                new_cost = cost_so_far[current_key] + 1
-                if neighbor_key in cost_so_far and new_cost >= cost_so_far[neighbor_key]:
-                    continue
-
-                cost_so_far[neighbor_key] = new_cost
-                priority = new_cost + self.tile_distance(neighbor, goal)
-                heapq.heappush(
-                    frontier,
-                    (priority, neighbor.row, neighbor.col, neighbor_key),
-                )
-                came_from[neighbor_key] = current_key
-
-        goal_key = (goal.col, goal.row)
-        if goal_key not in came_from:
-            return None
-
-        step_key = goal_key
-        while came_from[step_key] != (start.col, start.row):
-            parent = came_from[step_key]
-            if parent is None:
-                return None
-            step_key = parent
-
-        return GridPos(col=step_key[0], row=step_key[1])
 
     def _stop_dynamic_node(self, node: DynamicNode) -> None:
         node.target_pos = None

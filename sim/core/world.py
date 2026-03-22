@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import heapq
 from dataclasses import dataclass, field
 
 from sim.core.config import CONFIG
 from sim.nodes.base import DynamicNode, GridPos, Node, StaticNode
+from sim.nodes.behaviors.moveable import Moveable
 from sim.nodes.kinds import demo_nodes
 
 
@@ -137,6 +139,14 @@ class World:
 
     def update(self, dt: float) -> None:
         for node in self.dynamic_nodes:
+            if (
+                isinstance(node, Moveable)
+                and node.wandering
+                and node.target_pos is None
+                and node.queued_target_pos is None
+            ):
+                node.wander(max_distance_tiles=node.wander_distance_tiles)
+
             # Keep simulation state and render interpolation separate so the
             # movement logic stays easier to reason about.
             self._update_dynamic_node_logic(node, dt)
@@ -197,27 +207,77 @@ class World:
         )
 
     def _next_dynamic_step(self, node: DynamicNode) -> tuple[int, int]:
-        if node.target_pos is None:
+        target_pos = node.target_pos
+        if target_pos is None:
             return (0, 0)
 
-        if node.pos == node.target_pos:
+        if node.pos == target_pos:
             return (0, 0)
 
-        # This is intentionally simple greedy routing, not full pathfinding.
-        # We only consider the four cardinal neighbors and choose the open tile
-        # that reduces Manhattan distance to the target the most.
-        candidates = self.cardinal_neighbors(node.pos)
-        open_candidates = [
-            pos for pos in candidates if not self.is_tile_blocked(pos, exclude=node)
-        ]
-        if not open_candidates:
+        next_pos = self._find_next_path_step(node.pos, target_pos, exclude=node)
+        if next_pos is None:
             return (0, 0)
 
-        next_pos = min(
-            open_candidates,
-            key=lambda pos: (self.tile_distance(pos, node.target_pos), pos.row, pos.col),
-        )
         return (next_pos.col - node.pos.col, next_pos.row - node.pos.row)
+
+    def _find_next_path_step(
+        self,
+        start: GridPos,
+        goal: GridPos,
+        exclude: Node | None = None,
+    ) -> GridPos | None:
+        # Use a small A* search so movers route around blockers instead of
+        # ping-ponging on the edge of an obstacle.
+        frontier: list[tuple[int, int, int, tuple[int, int]]] = []
+        start_key = (start.col, start.row)
+        heapq.heappush(
+            frontier,
+            (self.tile_distance(start, goal), start.row, start.col, start_key),
+        )
+
+        came_from: dict[tuple[int, int], tuple[int, int] | None] = {
+            start_key: None,
+        }
+        cost_so_far: dict[tuple[int, int], int] = {
+            start_key: 0,
+        }
+
+        while frontier:
+            _, _, _, current_key = heapq.heappop(frontier)
+            current = GridPos(col=current_key[0], row=current_key[1])
+
+            if current == goal:
+                break
+
+            for neighbor in self.cardinal_neighbors(current):
+                if neighbor != goal and self.is_tile_blocked(neighbor, exclude=exclude):
+                    continue
+
+                neighbor_key = (neighbor.col, neighbor.row)
+                new_cost = cost_so_far[current_key] + 1
+                if neighbor_key in cost_so_far and new_cost >= cost_so_far[neighbor_key]:
+                    continue
+
+                cost_so_far[neighbor_key] = new_cost
+                priority = new_cost + self.tile_distance(neighbor, goal)
+                heapq.heappush(
+                    frontier,
+                    (priority, neighbor.row, neighbor.col, neighbor_key),
+                )
+                came_from[neighbor_key] = current_key
+
+        goal_key = (goal.col, goal.row)
+        if goal_key not in came_from:
+            return None
+
+        step_key = goal_key
+        while came_from[step_key] != (start.col, start.row):
+            parent = came_from[step_key]
+            if parent is None:
+                return None
+            step_key = parent
+
+        return GridPos(col=step_key[0], row=step_key[1])
 
     def _stop_dynamic_node(self, node: DynamicNode) -> None:
         node.target_pos = None

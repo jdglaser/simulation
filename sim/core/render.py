@@ -77,6 +77,7 @@ class Renderer:
             f"Static: {len(world.static_nodes)}",
             f"Dynamic: {len(world.dynamic_nodes)}",
             "Arrow keys: move villager_1",
+            "W: villager_1 wander",
             "R: reset demo scene",
         ]
         y = 10

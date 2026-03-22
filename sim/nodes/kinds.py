@@ -47,7 +47,7 @@ def demo_nodes() -> list[StaticNode | DynamicNode]:
             label="Villager",
             pos=GridPos(col=12, row=10),
             color=(114, 186, 245),
-            move_speed_tiles=2.0,
+            move_speed_tiles=5,
             vision_range_tiles=5,
         ),
     ]

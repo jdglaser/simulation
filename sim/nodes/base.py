@@ -56,6 +56,8 @@ class StaticNode(Node):
 class DynamicNode(Node):
     move_speed_tiles: float = 1.0
     vision_range_tiles: int = 4
+    wandering: bool = False
+    wander_distance_tiles: int = 4
     target_pos: GridPos | None = None
     queued_target_pos: GridPos | None = None
     move_progress: float = 0.0

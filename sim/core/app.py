@@ -39,6 +39,8 @@ def run() -> None:
                     villager.move_towards(GridPos(col=12, row=6))
                 elif isinstance(villager, Moveable) and event.key == pygame.K_DOWN:
                     villager.move_away_from(GridPos(col=12, row=6))
+                elif isinstance(villager, Moveable) and event.key == pygame.K_w:
+                    villager.wander(max_distance_tiles=5)
 
         world.update(dt)
         renderer.draw(screen, world)

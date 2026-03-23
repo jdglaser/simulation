@@ -21,6 +21,8 @@ class Renderer:
         for node in world.all_nodes:
             if not node.visible:
                 continue
+            if isinstance(node, DynamicNode):
+                self._draw_dynamic_vision(surface, node)
             self._draw_node(surface, node)
         self._draw_hud(surface, world)
 
@@ -60,6 +62,38 @@ class Renderer:
                 tile,
             )
             pygame.draw.rect(surface, (210, 54, 54), rect, 3)
+
+    def _draw_dynamic_vision(self, surface: pygame.Surface, node: DynamicNode) -> None:
+        tile = self.config.tile_size
+        rect = self._node_rect(node)
+        vision_padding = node.vision_range_tiles * tile
+        vision_rect = pygame.Rect(
+            rect.x - vision_padding,
+            rect.y - vision_padding,
+            rect.width + (vision_padding * 2),
+            rect.height + (vision_padding * 2),
+        )
+        self._draw_dotted_rect(surface, vision_rect, (196, 48, 48), dash_length=8, gap_length=6)
+
+    def _draw_dotted_rect(
+        self,
+        surface: pygame.Surface,
+        rect: pygame.Rect,
+        color: tuple[int, int, int],
+        dash_length: int,
+        gap_length: int,
+    ) -> None:
+        step = dash_length + gap_length
+
+        for x in range(rect.left, rect.right, step):
+            end_x = min(x + dash_length, rect.right)
+            pygame.draw.line(surface, color, (x, rect.top), (end_x, rect.top), 2)
+            pygame.draw.line(surface, color, (x, rect.bottom), (end_x, rect.bottom), 2)
+
+        for y in range(rect.top, rect.bottom, step):
+            end_y = min(y + dash_length, rect.bottom)
+            pygame.draw.line(surface, color, (rect.left, y), (rect.left, end_y), 2)
+            pygame.draw.line(surface, color, (rect.right, y), (rect.right, end_y), 2)
 
     def _node_rect(self, node: Node) -> pygame.Rect:
         tile = self.config.tile_size

@@ -27,6 +27,9 @@ def run() -> None:
                 running = False
             elif event.type == pygame.KEYDOWN:
                 villager = world.get_dynamic_node("villager_1")
+                moveable_nodes = [
+                    node for node in world.dynamic_nodes if isinstance(node, Moveable)
+                ]
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.key == pygame.K_r:
@@ -39,8 +42,9 @@ def run() -> None:
                     villager.move_towards(GridPos(col=12, row=6))
                 elif isinstance(villager, Moveable) and event.key == pygame.K_DOWN:
                     villager.move_away_from(GridPos(col=12, row=6))
-                elif isinstance(villager, Moveable) and event.key == pygame.K_w:
-                    villager.wander(max_distance_tiles=5)
+                elif event.key == pygame.K_w:
+                    for node in moveable_nodes:
+                        node.wander(max_distance_tiles=5)
 
         world.update(dt)
         renderer.draw(screen, world)

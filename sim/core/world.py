@@ -78,6 +78,16 @@ class World:
         # can use a single "can I enter this tile?" check.
         if not self.is_in_bounds(pos):
             return True
+
+        # A tile is also considered blocked if another dynamic node has already
+        # committed to stepping into it. This prevents two movers from picking
+        # the same destination tile in the same update window.
+        for node in self.dynamic_nodes:
+            if node is exclude:
+                continue
+            if node.active_step_target == pos:
+                return True
+
         for node in self.all_nodes:
             if node is exclude or not node.is_collidable:
                 continue
@@ -164,19 +174,22 @@ class World:
             self._stop_dynamic_node(node)
             return
 
+        if node.active_step_target is None:
+            node.active_step_target = self._resolve_active_step_target(node)
+        if node.active_step_target is None:
+            self._stop_dynamic_node(node)
+            return
+
         # move_progress tracks how many whole tiles of movement budget this node
         # has accumulated so far. A value of 1.0 means "advance one tile".
         node.move_progress += node.move_speed_tiles * dt
-        step_col, step_row = self._next_dynamic_step(node)
-        if step_col == 0 and step_row == 0:
-            self._stop_dynamic_node(node)
-            return
 
         # A fast unit may have enough progress to cross multiple tiles in one
         # update, so we consume movement in whole-tile steps.
         while node.move_progress >= 1.0:
-            node.pos = GridPos(col=node.pos.col + step_col, row=node.pos.row + step_row)
+            node.pos = node.active_step_target
             node.move_progress -= 1.0
+            node.active_step_target = None
 
             # Apply any queued redirect only after reaching a tile center so the
             # render interpolation does not snap to a different direction mid-step.
@@ -187,32 +200,34 @@ class World:
             if node.pos == node.target_pos:
                 self._stop_dynamic_node(node)
                 return
-            step_col, step_row = self._next_dynamic_step(node)
-            if step_col == 0 and step_row == 0:
+
+            node.active_step_target = self._resolve_active_step_target(node)
+            if node.active_step_target is None:
                 self._stop_dynamic_node(node)
                 return
 
     def _update_dynamic_node_render_state(self, node: DynamicNode) -> None:
-        if node.target_pos is None:
+        if node.target_pos is None or node.active_step_target is None:
             node.screen_offset_px = (0.0, 0.0)
             return
 
         # screen_offset_px is really a tile-fraction offset for now. The
         # renderer multiplies it by tile size to smooth motion between tile
         # centers while the logical position stays grid-based.
-        step_col, step_row = self._next_dynamic_step(node)
+        step_col = node.active_step_target.col - node.pos.col
+        step_row = node.active_step_target.row - node.pos.row
         node.screen_offset_px = (
             step_col * node.move_progress,
             step_row * node.move_progress,
         )
 
-    def _next_dynamic_step(self, node: DynamicNode) -> tuple[int, int]:
+    def _resolve_active_step_target(self, node: DynamicNode) -> GridPos | None:
         target_pos = node.target_pos
         if target_pos is None:
-            return (0, 0)
+            return None
 
         if node.pos == target_pos:
-            return (0, 0)
+            return None
 
         next_pos = next_path_step(
             CONFIG.pathfinding_algorithm,
@@ -221,14 +236,12 @@ class World:
             target_pos,
             exclude=node,
         )
-        if next_pos is None:
-            return (0, 0)
-
-        return (next_pos.col - node.pos.col, next_pos.row - node.pos.row)
+        return next_pos
 
     def _stop_dynamic_node(self, node: DynamicNode) -> None:
         node.target_pos = None
         node.queued_target_pos = None
+        node.active_step_target = None
         node.move_progress = 0.0
         node.screen_offset_px = (0.0, 0.0)
 
@@ -241,6 +254,7 @@ class World:
 
         node.target_pos = target_pos
         node.queued_target_pos = None
+        node.active_step_target = None
         node.move_progress = 0.0
         node.screen_offset_px = (0.0, 0.0)
         return True

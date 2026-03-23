@@ -60,6 +60,7 @@ class DynamicNode(Node):
     wander_distance_tiles: int = 4
     target_pos: GridPos | None = None
     queued_target_pos: GridPos | None = None
+    active_step_target: GridPos | None = None
     move_progress: float = 0.0
     screen_offset_px: tuple[float, float] = field(default_factory=lambda: (0.0, 0.0))
 

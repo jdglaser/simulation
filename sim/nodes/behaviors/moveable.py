@@ -31,11 +31,12 @@ class Moveable(DynamicNode):
         if self.world is None:
             return False
         self.wandering = True
-        self.wander_distance_tiles = max_distance_tiles
+        self.wander_distance_tiles = min(max_distance_tiles, self.vision_range_tiles)
+        effective_distance = self.wander_distance_tiles
 
         candidates: list[GridPos] = []
-        for row_delta in range(-max_distance_tiles, max_distance_tiles + 1):
-            for col_delta in range(-max_distance_tiles, max_distance_tiles + 1):
+        for row_delta in range(-effective_distance, effective_distance + 1):
+            for col_delta in range(-effective_distance, effective_distance + 1):
                 if col_delta == 0 and row_delta == 0:
                     continue
                 candidate = GridPos(
